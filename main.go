@@ -1,7 +1,17 @@
 package main
 
+/* Command line tool for retrieving particular values. Wraps the gabs lib.
+ *
+ * Required parameter: name of json file
+ * Optional parameter: list of json path keys
+ *
+ * Output: newline separated list of values found at each json path put in.
+ *
+ * Example call:
+ * go run main.go -file=~/.aws/cli/cache/sandbox--arn_aws_iam.json Credentials.SecretAccessKey Credentials.SessionToken Credentials.AccessKeyId
+ */
+
 import (
-	"errors"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -11,17 +21,22 @@ import (
 )
 
 func main() {
-	fileName := flag.String("name", "", "name of file to parse")
+	fileName := flag.String("file", "", "name of file to parse")
 	flag.Parse()
-	secr, token, id, err := readCredentials(*fileName)
+	jsonPaths := flag.Args()
+
+	results, err := readJSONPaths(*fileName, jsonPaths)
 	if err != nil {
 		fmt.Printf("error: %v", err)
+		return
 	}
 
-	fmt.Println(secr, token, id)
+	for _, r := range results {
+		fmt.Println(r)
+	}
 }
 
-func readCredentials(fileName string) (secretAccessKey, SessionToken, AccessKeyID string, err error) {
+func readJSONPaths(fileName string, jsonPaths []string) (results []string, err error) {
 	file, err := os.Open(fileName)
 	defer file.Close()
 
@@ -39,34 +54,14 @@ func readCredentials(fileName string) (secretAccessKey, SessionToken, AccessKeyI
 		return
 	}
 
-	secretAccessKey, ok := jsonParsed.Path("Credentials.SecretAccessKey").Data().(string)
-	if !ok {
-		err = errors.New("could find parse secretAccessKey")
-		return
-	}
-
-	SessionToken, ok = jsonParsed.Path("Credentials.SessionToken").Data().(string)
-	if !ok {
-		err = errors.New("could find parse SessionToken")
-		return
-	}
-
-	AccessKeyID, ok = jsonParsed.Path("Credentials.AccessKeyId").Data().(string)
-	if !ok {
-		err = errors.New("could find parse secretAccessKey")
-		return
+	for _, p := range jsonPaths {
+		value, ok := jsonParsed.Path(p).Data().(string)
+		if !ok {
+			err = fmt.Errorf("could parse JSON path:  %s", p)
+			return
+		}
+		results = append(results, value)
 	}
 
 	return
 }
-
-/*
-for later ;)
-func readCredential(jsonParsed *gabs.Container, key string) (string, error) {
-	value, ok := jsonParsed.Path(key).Data().(string)
-	if !ok {
-		return "", errors.New("could find parse secretAccessKey")
-	}
-	return value, nil
-}
-*/
